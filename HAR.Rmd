@@ -1,0 +1,141 @@
+---
+title: "A Machine Algorithm for Human Activity Recognition"
+author: "Keith Miller"
+date: "Monday, June 15, 2015"
+output: html_document
+---
+## Executive Summary
+This report describes and implements a machine-learning algorithm that uses data from a personal activity monitor to determine if the user of the device is performing a particular exercise in the correct way.  These devices have to date collected information about how much of a particular exercise the wearer is doing but not how well they are doing it.  The exercise in question is barbell lifts and the data was gathered from acceleromters placed on the belt, forearm, arm and dumbell of six different participants.
+
+The participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg).
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3dAGZdbd3
+```{r Libraries, echo = FALSE, warning=FALSE, message=FALSE}
+library(caret)
+library(AppliedPredictiveModeling)
+library(ggplot2)
+library(plyr)
+library(e1071)
+library(doParallel)
+```
+```{r Enable multi-core parallel processing , echo =FALSE}
+
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+
+
+```
+
+```{r Data Loading , echo= FALSE}
+#Assumes that the training data is in the working directory in the pml-training.csv file
+setwd("C:/Users/Keith/Google Drive/R/Practical Machine Learning/Project")
+train<-read.csv("C:/Users/Keith/Google Drive/R/Practical Machine Learning/Project/pml-training.csv")
+test<- read.csv("C:/Users/Keith/Google Drive/R/Practical Machine Learning/Project/pml-testing.csv")
+dims<-dim(train)
+
+```
+
+##Exploratory Data Analysis and Pre-Processing
+
+```{r Exploratory Data Analysis}
+#identifies those variables where more than 50% of the values are NA or blank and removes them
+set.seed(601)
+perc.na<-function(x) sum(is.na(x))/length(x)
+perc.blank<-function(x) sum(x=="")/length(x)
+badcols<-c(which(apply(train,2,perc.na)>0.5),which(apply(train,2,perc.blank)>0.5))
+train<- train[,-c(1:7,badcols)]
+test<- test[,-c(1:7,badcols)]  #same changes made to test set
+#check for zero-variance predictors
+train<-train[,-nearZeroVar(train)]
+
+#check for multi-collinearity and remove highly correlated variables
+M<-cor(train[,-53])
+cor.cols<-findCorrelation(M,0.9)
+train<-train[,-cor.cols]
+
+
+
+# Split training datasets into train and validation sets
+set.seed(601)
+trainrecords<-createDataPartition(train$classe,p=0.5,list = F)
+trainset<-train[trainrecords,]
+validset<-train[-trainrecords,]
+
+
+```
+
+The dataset has a total of `r dims[1]` rows and `r dims[2]` variables.  Reviewing the data manually, it was determined that many of the variables have a large number of NA data and/or a large number of blank values.  All variables with more than 50% of their values missing were removed from the dataset leaving `r dim(train)[[2]]` variables.
+
+Reviewing the remaining variables, for their suitability for inclusion in an algorithm, the variables in columns 1-8 will be ignored as they are not describing the behavior that we are trying to predict. For example, we are not trying to predict the performance of a particular study candidate.   Columns 60, classe, is the response we are trying to predict.  Therefore we will use columns 8-59 for our model building. 
+
+Given that the dataset has a large number of observations, it was decided to train models using only half the data and reserve the other half for testing to determine out of sample error rate
+
+```{r Correcting Skewness}
+col.skew<-apply(train[,-53],2,skewness)
+
+# plot(col.skew)
+# skewed <- which(abs(col.skew)>1) #WHAT VALUE DOES THIS NEED TO BE?
+# # train[,skewed]<-apply(train[,skewed],2,log10)
+# 
+# col.skew<-apply(train[,-53],2,skewness)
+# 
+# plot(col.skew)
+```
+
+
+```{r Model Performance, cache =TRUE}
+trellis.par.set(caretTheme())
+
+rfallfitcv10<-train(classe~.,
+                     data=trainset,
+                     method = 'rf', 
+                     trControl = trainControl(method='cv',
+                                              number = 10 ))
+#plots the importance of the top 20 variables in the model 
+ plot(varImp(rfallfitcv10),top =20)
+
+##This code compares the differenct models
+cvValues <- resamples(list(Linear_Model = lmTune, 
+                           Random_Forest_CV10 = rffit,
+                           Gradient_Boosting = gbmTune
+summary(cvValues)                           
+                           
+```
+
+```{r Generate Answers for Submission, echo=FALSE}
+#writes output files containing the answer to each question
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+
+    }}
+    
+```
+
+
+
+
+##Approach described in lectures
+
+define error rate (type I/type II)
+split data into:
+training, testing, validation (optional)
+pick features from the training set
+use cross-validation
+pick prediction function (model) on the training set
+use cross-validation
+if no validation set
+apply 1 time to test set
+if there is a validation set
+apply to test set and refine
+apply 1 time to validation
+
+## References
+1. Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3dB0epBGD
