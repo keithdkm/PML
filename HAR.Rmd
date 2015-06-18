@@ -20,13 +20,7 @@ library(plyr)
 library(e1071)
 library(doParallel)
 ```
-```{r Enable multi-core parallel processing , echo =FALSE}
 
-cl <- makeCluster(detectCores())
-registerDoParallel(cl)
-
-
-```
 
 ```{r Data Loading , echo= FALSE}
 #Assumes that the training data is in the working directory in the pml-training.csv file
@@ -39,24 +33,47 @@ dims<-dim(train)
 
 ##Exploratory Data Analysis and Pre-Processing
 
+The dataset has a total of `r dims[1]` rows and `r dims[2]` variables.  Reviewing the data, it was determined that many of the variables have a large number of NA data and/or a large number of blank values. Further, the variables in columns 1-7 should not  be included in a prediction model as they should not be describing the behavior that we are trying to assess - they relate to the time of day, the subject performing the exercise and the group of results that is summarized by the observation. These variables will not form part of a prediction in the real world and in the case of the window variable correlate 100% with 
+
+
+
 ```{r Exploratory Data Analysis}
 #identifies those variables where more than 50% of the values are NA or blank and removes them
 set.seed(601)
-perc.na<-function(x) sum(is.na(x))/length(x)
-perc.blank<-function(x) sum(x=="")/length(x)
-badcols<-c(which(apply(train,2,perc.na)>0.5),which(apply(train,2,perc.blank)>0.5))
+perc.na<-function(x) sum(is.na(x))/length(x)*100
+perc.blank<-function(x) sum(x=="")/length(x)*100
+NAcols<-apply(train,2,perc.na)
+Blankcols<-apply(train,2,perc.blank)
+
+par(mfrow=(c(1,2)))
+plot(NAcols, xlab = "Column Number", ylab = "Percentage NA values")
+plot(Blankcols,xlab = "Column Number", ylab = "Percentage Blank values")
+```
+
+All columns in the upper groups in these plots will be removed from the dataset
+```{r Remove columns with missng data}
+badcols<-c(which(NAcols>0.9),which(Blankcols>0.9))
 train<- train[,-c(1:7,badcols)]
 test<- test[,-c(1:7,badcols)]  #same changes made to test set
+```
+
+Nect variables that have little or no variability and variables that are highly correlated with other variables in the set are removed.  These variables can cause problems in certain models.
+
+```{r REmove zero variance and highly corellated variables }
 #check for zero-variance predictors
-train<-train[,-nearZeroVar(train)]
+zero.cols<-nearZeroVar(train)
+if (length(zero.cols)>00) {train<-train[,-zero.cols];test<-test[,-zero.cols]}
 
 #check for multi-collinearity and remove highly correlated variables
 M<-cor(train[,-53])
 cor.cols<-findCorrelation(M,0.9)
 train<-train[,-cor.cols]
+test<-test[,-cor.cols]
+```
 
+ This leaves `r dim(train)[[2]]` variables which will be the predictors used for the model
 
-
+```{r Create Traingin and Validation  Sets}
 # Split training datasets into train and validation sets
 set.seed(601)
 trainrecords<-createDataPartition(train$classe,p=0.5,list = F)
@@ -66,41 +83,39 @@ validset<-train[-trainrecords,]
 
 ```
 
-The dataset has a total of `r dims[1]` rows and `r dims[2]` variables.  Reviewing the data manually, it was determined that many of the variables have a large number of NA data and/or a large number of blank values.  All variables with more than 50% of their values missing were removed from the dataset leaving `r dim(train)[[2]]` variables.
+Given the size of the dataset has a large number of observations, it was decided to train models using only half the data and reserve the other half for cross validation to estimate the out-of-sample error rate
 
-Reviewing the remaining variables, for their suitability for inclusion in an algorithm, the variables in columns 1-8 will be ignored as they are not describing the behavior that we are trying to predict. For example, we are not trying to predict the performance of a particular study candidate.   Columns 60, classe, is the response we are trying to predict.  Therefore we will use columns 8-59 for our model building. 
-
-Given that the dataset has a large number of observations, it was decided to train models using only half the data and reserve the other half for testing to determine out of sample error rate
-
-```{r Correcting Skewness}
-col.skew<-apply(train[,-53],2,skewness)
-
-# plot(col.skew)
-# skewed <- which(abs(col.skew)>1) #WHAT VALUE DOES THIS NEED TO BE?
-# # train[,skewed]<-apply(train[,skewed],2,log10)
-# 
-# col.skew<-apply(train[,-53],2,skewness)
-# 
-# plot(col.skew)
-```
+##Model Selection
+The approach we will use is to use cross-validation within the caret package to determine which predictors we will use and tune the performance of the model and then use the validset data to estimate out-of-sample error rates.   We will use prediction accuracy as the measure of model effectiveness when choosing the model.  
 
 
+Initially the caret package train function is run against the entire training set
 ```{r Model Performance, cache =TRUE}
-trellis.par.set(caretTheme())
-
+# trellis.par.set(caretTheme())
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
 rfallfitcv10<-train(classe~.,
                      data=trainset,
                      method = 'rf', 
                      trControl = trainControl(method='cv',
                                               number = 10 ))
+
+
 #plots the importance of the top 20 variables in the model 
- plot(varImp(rfallfitcv10),top =20)
+ 
+
+# stopCluster()
+
+confusionMatrix(rfallfitcv10)
+
+#plots the importance of the top 20 variables in the model 
+plot(varImp(rfallfitcv10),top =10)
 
 ##This code compares the differenct models
-cvValues <- resamples(list(Linear_Model = lmTune, 
-                           Random_Forest_CV10 = rffit,
-                           Gradient_Boosting = gbmTune
-summary(cvValues)                           
+# cvValues <- resamples(list(Linear_Model = lmTune, 
+#                            Random_Forest_CV10 = rffit,
+#                            Gradient_Boosting = gbmTune
+# summary(cvValues)                           
                            
 ```
 
