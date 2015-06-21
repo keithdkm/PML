@@ -5,17 +5,17 @@ date: "Monday, June 15, 2015"
 output: html_document
 ---
 ## Executive Summary
-This report describes and implements a machine-learning algorithm that uses data from a personal activity monitor to determine if the user of the device is performing a particular exercise in the correct way.  
+This report describes the selection and tuning of a machine-learning algorithm that uses data from personal activity monitors to determine if a particular exercise is being performed in the correct way.  
 
 A machine algorithm was created that could predict the exercise being performed with an out-of sample error rate of 1%.  When tested against 20 sample prediction problems it successfully predicted all 20.
 
 ##Qualitative Activity Recognition
 
-Today, personal activity monitors collect information about how ***much*** of a particular exercise the wearer is doing but not how ***well*** they are doing it.  This project is an attempt to use data from movement sensors to determine if a user is performing the exercise in the correect way.
+Today, personal activity monitors collect information about how **much** of a particular exercise the wearer is doing but not how **well** they are doing it.  This project is an attempt to use data from movement sensors to determine if a user is performing the exercise in the correct way.
 
-The exercise in question is barbell lifts and the data was gathered from acceleromters and gyroscopes placed on the belt, forearm, arm and dumbell of six different participants.  
+The exercise in question is the barbell lift and the data was gathered from acceleromters and gyroscopes placed on the belt, forearm, arm and dumbell of six different participants.  
 
-The participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+The participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different ways: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
 
 Class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes. Participants were supervised by an experienced weight lifter to make sure the execution complied to the manner they were supposed to simulate. The exercises were performed by six male participants aged between 20-28 years, with little weight lifting experience. We made sure that all participants could easily simulate the mistakes in a safe and controlled manner by using a relatively light dumbbell (1.25kg).
 
@@ -42,9 +42,9 @@ dims<-dim(train)
 
 ##Feature Extraction
 
-The selection of the features that could be used in the training data is described in ref 1. 
+The selection of the features that could be used in the training data is described in 1. 
 
-For feature extraction we used a sliding window approach
+"For feature extraction we used a sliding window approach
 with different lengths from 0.5 second to 2.5 seconds, with
 0.5 second overlap. In each step of the sliding window approach
 we calculated features on the Euler angles (roll, pitch
@@ -52,14 +52,14 @@ and yaw), as well as the raw accelerometer, gyroscope and
 magnetometer readings. For the Euler angles of each of the
 four sensors we calculated eight features: mean, variance,
 standard deviation, max, min, amplitude, kurtosis and skewness,
-generating in total 96 derived feature sets.
+generating in total 96 derived feature sets."
 
 
 
 
 ##Exploratory Data Analysis and Pre-Processing
 
-Two datasets were provided.  The training set is `r dims[1]` observations of `r dims[2]-1` features and 1 categorical response (Levels A-E).   The testing set has just 20 observations of the `r dims[2]-1` features and an id number for each.  This latter set was put aside for one-time final testing of the model.  After some initial modelling work, it was determined that using 50% of the data for model selection and tuning was adequate and the remainder could be set aside for cross-validation and out-of-sample error rate estimation.  All the pre-processing that was applied to the training set was also be applied validation and test sets.  
+Two datasets were provided.  The training set is `r dims[1]` observations of `r dims[2]-1` features and 1 categorical response (Levels A-E).   The testing set has just 20 observations of the `r dims[2]-1` features and an id number for each.  After some initial modelling work, it was determined that using 50% of the data for model selection and tuning was adequate and the remainder could be set aside for cross-validation and out-of-sample error rate estimation.  All the pre-processing that was applied to the training set was also be applied validation and test sets.  
 
 ```{r Create Training and cross-Validation Sets}
 # Split training datasets into train and validation sets
@@ -76,7 +76,7 @@ Reviewing the data, it was determined that many of the features have a large num
 trainset[1:5,1:7]
 
 ```
-```{r Exploratory Data Analysis}
+```{r Exploratory Data Analysis, fig.height=3}
 #identifies those variables where more than 50% of the values are NA or blank and removes them
 
 perc.na<-function(x) sum(is.na(x))/length(x)*100
@@ -120,82 +120,70 @@ if (length(cor.cols)>0){trainset<-trainset[,-cor.cols];validset<-validset[,-cor.
 
 ##Model Selection
 
-The caret package in R creates a consistent way of accessing all the functions and models that R has to offer, offers a set of tools that semi-automates tuning of parameters and allows parallel testing of models on multi-core machines thus speeding the process of modle selection.  
+The caret package in R creates a consistent way of accessing all the functions and models that R has to offer, offers a set of tools that semi-automates model selection, pre-processing, parameter tuning and resampling strategy and allows parallel testing of models on multi-core machines thus speeding the process of model selection.  
 
 
-The approach used was to first apply the train function in caret in its default mode, not giving it any parameters selecting model type or cross-validation approach.   is to use cross-validation within the caret package to determine which predictors we will use and tune the performance of the model and then apply the model oe-time to the validation set to estimate out-of-sample error rates.   We will use prediction accuracy as the measure of model effectiveness when choosing the model.  
+The approach used was to first apply the ***train*** function in caret in its default mode, not giving it any parameters or selecting a model type or cross-validation approach.   This yielded very promising results as can be seen below.  Prediction accuracy was used as the measure of model effectiveness when choosing the model.  
 
 
-Initially the 
-```{r Model Performance, cache =TRUE}
-# trellis.par.set(caretTheme())
+ 
+```{r First Model Try , cache =TRUE}
+
 cl <- makeCluster(detectCores())
 registerDoParallel(cl)
 firsttry<-train(ytrain~.,data=trainset)
 
+firsttry
 
 confusionMatrix(firsttry)
-
-# rfallfitcv10<-trainset(classe~.,
-#                      data=trainset,
-#                      method = 'rf', 
-#                      trControl = trainControl(method='cv',
-#                                               number = 10 ))
+```
+This yields very promising results with an error rate of around 2% using a random forest with bootstrap resampling.  After some tuning which included testing other models, re-casting the features using PCA and trying different resampling and cross-validation approaches, the final model was a random forest with 10-fold cross-validation.
 
 
+```{r Final Model, cache=TRUE, warning=FALSE,message=FALSE}
 
- 
+rfallfitcv10<-train(ytrain~.,
+                     data=trainset,
+                     method = 'rf', 
+                     trControl = trainControl(method='cv',
+                                              number = 10 ))
+rfallfitcv10
+
+confusionMatrix(rfallfitcv10)
 
 
-
-# ConfusionMatrix(rfallfitcv10)
-
-#plots the importance of the top 20 variables in the model 
-# plot(varImp(rfallfitcv10),top =10)
-
-##This code compares the differenct models
-# cvValues <- resamples(list(Linear_Model = lmTune, 
-#                            Random_Forest_CV10 = rffit,
-#                            Gradient_Boosting = gbmTune
-# summary(cvValues)                           
-                           
 ```
 
-```{r Generate Answers for Submission, echo=FALSE}
-#writes output files containing the answer to each question
-pml_write_files = function(x){
-  n = length(x)
-  for(i in 1:n){
-    filename = paste0("problem_id_",i,".txt")
-    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+This yielded a 1% in-sample error rate for the final model
 
-setwd("C:/Users/Keith/Google Drive/R/Practical Machine Learning/Project/results")
-    
-    
-    }}
-    
+
+
+##Out-of-Sample Error Rate Estimation Using Cross-Validation
+
+Having used cross-validation in the selection of features and model, we must use a separate set of data to estimate the out-of-sample error rate.  Now we will now cross-validate using our validation data, the other half of the original training set that we started with.  Given the similarity of the training and test data, we would expect the out-of-sample rate to be close to the in-sample rate, but probably not as good. 
+
+```{r Cross Validation, warning=FALSE,message=FALSE}
+ypreds<-predict(rfallfitcv10, newdata = validset)
+confusionMatrix(ypreds,yvalid)
 ```
 
+##Conclusion
+The out-of-sample error rate of <1% is just as good as the in-sample error rate and so the chosen model seems to be effective.  When run against the 20 test observations it correctly identified all 20 classes.
 
 
-
-##Approach described in lectures
-
-define error rate (type I/type II)
-split data into:
-training, testing, validation (optional)
-pick features from the training set
-use cross-validation
-pick prediction function (model) on the training set
-use cross-validation
-if no validation set
-apply 1 time to test set
-if there is a validation set
-apply to test set and refine
-apply 1 time to validation
 
 ## References
 1. Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
 
 
 Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3dB0epBGD
+
+##Appendix
+
+###The 10 most significant variables in the chosen model
+```{r}
+
+#plots the importance of the top 10 variables in the model 
+plot(varImp(rfallfitcv10),top =10)
+```
+
